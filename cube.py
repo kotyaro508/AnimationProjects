@@ -2,59 +2,57 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 
-# угол между векторами u и v при правом повороте вокруг оси z
+# the angle between the vectors u and v with the right to rotate around the z axis
 def angle_between(u, v, z):
     u_norm = u / np.linalg.norm(u)
     v_norm = v / np.linalg.norm(v)
     cross = np.cross(u_norm, v_norm)
     if np.linalg.norm(cross) == 0:
-        return np.arccos(np.dot(u_norm, v_norm)) % (2 * np.pi)
+        return np.arccos(np.dot(u_norm, v_norm))
     return (np.arccos(np.dot(u_norm, v_norm)) *
             np.dot(z / np.linalg.norm(z), cross / np.linalg.norm(cross))) % (2 * np.pi)
 
 
 class Box:
     def __init__(self, center, sizes, x_axis, y_axis):
-        self.center = center                                               # центр тела
-        self.axes = np.array([x_axis, y_axis, np.cross(x_axis, y_axis)])   # координатные оси
-        self.sizes = sizes                                                 # длины сторон
+        self.center = center
+        self.axes = np.array([x_axis, y_axis, np.cross(x_axis, y_axis)])
+        self.sizes = sizes
         
-        # вектор линии узлов == пересечение двух плоскостей Oxy == векторное произведение двух осей z
+        # knot line vector == intersection of two Oxy planes == cross product of two z axes
         knot_line_axis = (np.cross(np.array([0, 0, 1]), self.axes[2]) /
                           np.linalg.norm(np.cross(np.array([0, 0, 1]),
                                                   self.axes[2])))
         
-        # один из двух углов прецессии (в множестве [0; pi) или в множестве (pi; 2pi) )
+        # one of two precession angles (in the set [0; pi) or in the set (pi; 2pi) )
         precession = angle_between(np.array([1, 0, 0]),
                                    knot_line_axis,
                                    np.array([0, 0, 1]))
         
-        self.precession = precession % np.pi                               # угол прецессии (в множестве [0; pi) )
+        self.precession = precession % np.pi                               # precession angle (in the set [0; pi) )
         
-        # задание вектора линии узлов под острым углом прецессии к неподвижной оси x (умножение на 1 или -1)
+        # set the knot line vector at an acute angle of precession to the fixed x-axis (multiply by 1 or -1)
         knot_line_axis *= (-2) * (precession // np.pi - 0.5)
         
         del precession
         
-        self.nutation = angle_between(np.array([0, 0, 1]),                 # угол нутации (в множестве [0; 2pi) )
+        self.nutation = angle_between(np.array([0, 0, 1]),                 # nutation angle (in the set [0; 2pi) )
                                       self.axes[2],
                                       knot_line_axis)
         
-        self.own_rotation = angle_between(knot_line_axis,                  # угол собственного вращения
-                                          self.axes[0],                     # (в множестве [0; 2pi) )
+        self.own_rotation = angle_between(knot_line_axis,                  # own rotation angle
+                                          self.axes[0],                     # (in the set [0; 2pi) )
                                           self.axes[2])
         
         del knot_line_axis
     
     def box_edges(self):
-        edges = []                                                         # рёбра тела
+        edges = []
         
-        # добавляем по 4 ребра вдоль каждой оси
         for i in range(3):
             for j in (-0.5, 0.5):
                 for k in (-0.5, 0.5):
                     
-                # индексы j и k задают расположение центров каждого из 4-х рёбер вдоль оси i
                     edges.append(np.array([self.center +
                                                 j * self.sizes[i - 2] * self.axes[i - 2] +
                                                 k * self.sizes[i - 1] * self.axes[i - 1] -
@@ -67,18 +65,18 @@ class Box:
         return np.array(edges)
                     
     def render(self, ax):
-        # отрисовка центра тела
+        # drawing the center of the body
         ax.scatter(self.center[0], self.center[1], self.center[2], color="black", s=100)
         
         colors = ['red', 'blue', 'green']
         static_axes = np.eye(3)
         
         for i in range(3):
-            # система координат, связанная с телом
+            # coordinate system associated with the body
             vector = np.array([self.center, self.center + self.axes[i]]).T
             ax.plot(vector[0], vector[1], vector[2], color=colors[i])
             
-            # неподвижная система координат
+            # fixed coordinate system
             vector = np.array([self.center, self.center + static_axes[i]]).T
             ax.plot(vector[0], vector[1], vector[2], color=colors[i])
         
@@ -86,7 +84,7 @@ class Box:
         del static_axes
         del vector
         
-        # отрисовка тела
+        # drawing the body
         for edge in self.box_edges():
             ax.plot(edge[0], edge[1], edge[2], color='grey')
 
@@ -98,8 +96,8 @@ if __name__ == "__main__":
     box_x_axis = np.array([1, -1, 0])
     box_y_axis = np.array([-1, -1, 0.5])
     
-    box_x_axis = box_x_axis / np.linalg.norm(box_x_axis)   # нормировка вектора вдоль Ox
-    box_y_axis = box_y_axis / np.linalg.norm(box_y_axis)   # нормировка вектора вдоль Oy
+    box_x_axis = box_x_axis / np.linalg.norm(box_x_axis)   # normalization of vector along Ox
+    box_y_axis = box_y_axis / np.linalg.norm(box_y_axis)   # normalization of vector along Oy
     
     cube = Box(box_center, box_sizes, box_x_axis, box_y_axis)
     
