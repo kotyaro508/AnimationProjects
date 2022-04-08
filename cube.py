@@ -7,42 +7,41 @@ class Box:
     def __init__(self, center, sizes, orientation):
         self.center = center
         self.sizes = sizes
-        self.roll = R.from_euler('xyz', np.array([orientation[0], 0, 0]))
-        self.pitch = R.from_euler('xyz', np.array([0, orientation[1], 0]))
-        self.yaw = R.from_euler('xyz', np.array([0, 0, orientation[2]]))
-        self.matrix = self.yaw.as_matrix() @ self.pitch.as_matrix() @ self.roll.as_matrix()
+        
+        # orientation = np.array([roll, pitch, yaw])
+        self.matrix = R.from_euler('xyz', orientation).as_matrix()
     
     def box_edges(self):
         edges = []
         
-        for j in (-0.5, 0.5):
-            for k in (-0.5, 0.5):
-                edges.append(np.array([[-self.sizes[0] / 2,
+        for j in (-1, 1):
+            for k in (-1, 1):
+                edges.append(np.array([[-self.sizes[0],
                                         j * self.sizes[1],
                                         k * self.sizes[2]],
-                                       [self.sizes[0] / 2,
+                                       [self.sizes[0],
                                         j * self.sizes[1],
                                         k * self.sizes[2]]]).T)
         
-        for k in (-0.5, 0.5):
-            for i in (-0.5, 0.5):
+        for k in (-1, 1):
+            for i in (-1, 1):
                 edges.append(np.array([[i * self.sizes[0],
-                                        -self.sizes[1] / 2,
+                                        -self.sizes[1],
                                         k * self.sizes[2]],
                                        [i * self.sizes[0],
-                                        self.sizes[1] / 2,
+                                        self.sizes[1],
                                         k * self.sizes[2]]]).T)
         
-        for i in (-0.5, 0.5):
-            for j in (-0.5, 0.5):
+        for i in (-1, 1):
+            for j in (-1, 1):
                 edges.append(np.array([[i * self.sizes[0],
                                         j * self.sizes[1],
-                                        -self.sizes[2] / 2],
+                                        -self.sizes[2]],
                                        [i * self.sizes[0],
                                         j * self.sizes[1],
-                                        self.sizes[2] / 2]]).T)
+                                        self.sizes[2]]]).T)
         
-        edges = np.array(edges)
+        edges = np.array(edges)/2
         
         for i in range(12):
             edges[i] = self.matrix.T @ edges[i] + np.array([self.center, self.center]).T
@@ -68,10 +67,6 @@ class Box:
         # body
         for edge in self.box_edges():
             ax.plot(edge[0], edge[1], edge[2], color='grey')
-        
-        del colors
-        del static_axes
-        del vector
 
 
 if __name__ == "__main__":
