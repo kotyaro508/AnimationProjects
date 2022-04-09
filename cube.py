@@ -21,7 +21,7 @@ class Box:
                                         k * self.sizes[2]],
                                        [self.sizes[0],
                                         j * self.sizes[1],
-                                        k * self.sizes[2]]]).T)
+                                        k * self.sizes[2]]]).T / 2)
         
         for k in (-1, 1):
             for i in (-1, 1):
@@ -30,7 +30,7 @@ class Box:
                                         k * self.sizes[2]],
                                        [i * self.sizes[0],
                                         self.sizes[1],
-                                        k * self.sizes[2]]]).T)
+                                        k * self.sizes[2]]]).T / 2)
         
         for i in (-1, 1):
             for j in (-1, 1):
@@ -39,9 +39,9 @@ class Box:
                                         -self.sizes[2]],
                                        [i * self.sizes[0],
                                         j * self.sizes[1],
-                                        self.sizes[2]]]).T)
+                                        self.sizes[2]]]).T / 2)
         
-        edges = np.array(edges)/2
+        edges = np.array(edges)
         
         for i in range(12):
             edges[i] = self.matrix.T @ edges[i] + np.array([self.center, self.center]).T
