@@ -12,7 +12,7 @@ class Box:
     def box_edges(self):
         edges = []
         
-        for j in (-1, 1):
+        for j in (-1, 1):                
             for k in (-1, 1):
                 edges.append(np.array([[-self.sizes[0],
                                         j * self.sizes[1],
@@ -45,60 +45,74 @@ class Box:
             edges[i] = self.matrix.T @ edges[i] + np.array([self.center, self.center]).T
         
         return edges
-                    
-    def render(self, ax):
-        # center of the body
-        ax.scatter(self.center[0], self.center[1], self.center[2], color="black", s=100)
-        
+    
+    def render(self, ax):        
         colors = ['red', 'blue', 'green']
         static_axes = np.eye(3)
         
-        for i in range(3):            
+        lines = []
+        
+        for i in range(3):
             # fixed coordinate system
             vector = np.array([self.center, self.center + static_axes[i]]).T
-            ax.plot(vector[0], vector[1], vector[2], color=colors[i])
+            lines.append(ax.plot(vector[0], vector[1], vector[2], color=colors[i])[0])
             
             # coordinate system associated with the body
             vector = np.array([self.center, self.center + self.matrix[i]]).T
-            ax.plot(vector[0], vector[1], vector[2], color=colors[i])
+            lines.append(ax.plot(vector[0], vector[1], vector[2], color=colors[i])[0])
         
         # body
         for edge in self.box_edges():
-            ax.plot(edge[0], edge[1], edge[2], color='grey')
+            lines.append(ax.plot(edge[0], edge[1], edge[2], color='grey')[0])
+        
+        return lines
 
 
 def update_cube(phase_number, orientation, plot):
-    return [Box(box_center, box_sizes, orientation[phase_number]).render(ax)]
+    ax.clear()
+    ax.set(xlim3d=limits[0], xlabel='X')
+    ax.set(ylim3d=limits[1], ylabel='Y')
+    ax.set(zlim3d=limits[2], zlabel='Z')
+    return Box(box_center, box_sizes, orientation[phase_number]).render(ax)
 
 
 if __name__ == "__main__":
-    box_center = np.array([0, 1, -5])
-    box_sizes = np.array([2, 2, 2])
+    box_center = np.array([0, 0, 0])
+    box_sizes = np.array([1, 2, 4])
     
     box_orientation = -np.array([np.pi/2, 7*np.pi/8, 0])
     
     cube = Box(box_center, box_sizes, box_orientation)
     
     fig = plt.figure()
-    ax = plt.figure(figsize=(7, 7)).add_subplot(projection='3d')
+    ax = fig.add_subplot(projection="3d")
+    
+    limits = []
+    for i in range(3):
+        limits.append(np.array([box_center[i], box_center[i]]) +
+                      np.array([-max(box_sizes), max(box_sizes)])*0.7)
+    
+    ax.set(xlim3d=limits[0], xlabel='X')
+    ax.set(ylim3d=limits[1], ylabel='Y')
+    ax.set(zlim3d=limits[2], zlabel='Z')
     
     phase = np.arange(0, 3*np.pi/2, 0.05)
     orientation = []
     
     for p in np.arange(0, np.pi/2, 0.05):
         orientation.append(box_orientation + [p, 0, 0])
-    
+        
     box_orientation += [np.pi/2, 0, 0]
     
     for p in np.arange(0, np.pi/2, 0.05):
         orientation.append(box_orientation + [0, p, 0])
-    
+        
     box_orientation += [0, np.pi/2, 0]
     n = len(orientation)
     
     for i in range(len(phase) - n):
         orientation.append(box_orientation + [0, 0, i * 0.05])
-    
+        
     orientation = np.array(orientation)
     
     plot = [cube.render(ax)]
@@ -110,8 +124,8 @@ if __name__ == "__main__":
                               frames=frn,
                               fargs=(orientation,plot),
                               interval=1000/fps,
-                              blit=True,
                               repeat=False)
     
     fn = 'cube_rotation_funcanimation'
+    plt.show()
     animation.save(fn+'.html',writer='html',fps=fps)
