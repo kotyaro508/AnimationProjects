@@ -66,66 +66,85 @@ class Box:
             lines.append(ax.plot(edge[0], edge[1], edge[2], color='grey')[0])
         
         return lines
+    
+    def apply_control(self, v, omega, dt):
+        self.center = self.center + v * dt
+        phi = np.linalg.norm(omega) * dt
+        omega = omega / np.linalg.norm(omega)
+        self.matrix = self.matrix @ np.array([[omega[0]**2 + np.cos(phi)*(1 - omega[0]**2),
+                                 omega[0]*omega[1]*(1 - np.cos(phi)) + omega[2]*np.sin(phi),
+                                 omega[0]*omega[2]*(1 - np.cos(phi)) - omega[1]*np.sin(phi)],
+                                [omega[0]*omega[1]*(1 - np.cos(phi)) - omega[2]*np.sin(phi),
+                                 omega[1]**2 + np.cos(phi)*(1 - omega[1]**2),
+                                 omega[1]*omega[2]*(1 - np.cos(phi)) + omega[0]*np.sin(phi)],
+                                [omega[0]*omega[2]*(1 - np.cos(phi)) + omega[1]*np.sin(phi),
+                                 omega[1]*omega[2]*(1 - np.cos(phi)) - omega[0]*np.sin(phi),
+                                 omega[2]**2 + np.cos(phi)*(1 - omega[2]**2)]])
 
-
-def update_cube(phase_number, orientation, plot):
+# object update function
+def update_cube(phase_number, cube, center, orientation, dt, ax):
     ax.clear()
     ax.set(xlim3d=limits[0], xlabel='X')
     ax.set(ylim3d=limits[1], ylabel='Y')
     ax.set(zlim3d=limits[2], zlabel='Z')
-    return Box(box_center, box_sizes, orientation[phase_number]).render(ax)
+    cube.apply_control(center[phase_number], orientation[phase_number], dt)
+    return [cube.render(ax)]
 
 
 if __name__ == "__main__":
-    box_center = np.array([0, 0, 0])
-    box_sizes = np.array([1, 2, 4])
-    
-    box_orientation = -np.array([np.pi/2, 7*np.pi/8, 0])
-    
+#     object creation
+    box_center = np.array([0.0, 0.0, 0.0])
+    box_sizes = np.array([1.0, 2.0, 4.0])
+    box_orientation = np.array([0.0, 0.0, 0.0])    
     cube = Box(box_center, box_sizes, box_orientation)
     
-    fig = plt.figure()
+#     figure creation
+    fig = plt.figure(figsize=(15, 15))
     ax = fig.add_subplot(projection="3d")
     
+#     fixing the scale of the figure axes
     limits = []
     for i in range(3):
         limits.append(np.array([box_center[i], box_center[i]]) +
                       np.array([-max(box_sizes), max(box_sizes)])*0.7)
-    
     ax.set(xlim3d=limits[0], xlabel='X')
     ax.set(ylim3d=limits[1], ylabel='Y')
     ax.set(zlim3d=limits[2], zlabel='Z')
     
-    phase = np.arange(0, 3*np.pi/2, 0.05)
+#     number of phases
+    n = 300
+    phase = np.arange(0, n, 1)
+    
+#     time step
+    dt = 0.01
+    
+#     angular velocity
     orientation = []
-    
-    for p in np.arange(0, np.pi/2, 0.05):
-        orientation.append(box_orientation + [p, 0, 0])
-        
-    box_orientation += [np.pi/2, 0, 0]
-    
-    for p in np.arange(0, np.pi/2, 0.05):
-        orientation.append(box_orientation + [0, p, 0])
-        
-    box_orientation += [0, np.pi/2, 0]
-    n = len(orientation)
-    
-    for i in range(len(phase) - n):
-        orientation.append(box_orientation + [0, 0, i * 0.05])
-        
+    orientation.extend([[np.pi/2, 0, 0]] * 100)
+    orientation.extend([[0, np.pi/2, 0]] * 100)
+    orientation.extend([[0, 0, np.pi/2]] * 100)
     orientation = np.array(orientation)
     
-    plot = [cube.render(ax)]
-    fps = 10
-    frn = len(phase)
+#     no transfer
+    center = np.zeros((n, 3))
+
+#   plot = [cube.render(ax)]
+
+#     elimination of incomprehensible initial shift by 2*dt
+    cube.apply_control(np.array([0, 0, 0]),
+                       -2*orientation[0],
+                       dt)
     
+#     animation creation
+    fps = 10
     animation = FuncAnimation(fig=fig,
                               func=update_cube,
-                              frames=frn,
-                              fargs=(orientation,plot),
+                              frames=n,
+                              fargs=(cube,center,orientation,dt,ax),
                               interval=1000/fps,
                               repeat=False)
     
+#     file saving
     fn = 'cube_rotation_funcanimation'
     plt.show()
     animation.save(fn+'.html',writer='html',fps=fps)
