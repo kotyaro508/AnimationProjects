@@ -1,14 +1,13 @@
 import matplotlib.pyplot as plt
 import numpy as np
 from scipy.spatial.transform import Rotation as R
+from matplotlib.animation import FuncAnimation
 
 
 class Box:
     def __init__(self, center, sizes, orientation):
         self.center = center
         self.sizes = sizes
-        
-        # orientation = np.array([roll, pitch, yaw])
         self.matrix = R.from_euler('xyz', orientation).as_matrix()
     
     def box_edges(self):
@@ -49,34 +48,83 @@ class Box:
         return edges
                     
     def render(self, ax):
-        # center of the body
-        ax.scatter(self.center[0], self.center[1], self.center[2], color="black", s=100)
-        
         colors = ['red', 'blue', 'green']
         static_axes = np.eye(3)
         
+
+        lines = []
         for i in range(3):            
             # fixed coordinate system
             vector = np.array([self.center, self.center + static_axes[i]]).T
-            ax.plot(vector[0], vector[1], vector[2], color=colors[i])
+            lines.append(ax.plot(vector[0], vector[1], vector[2], color=colors[i])[0])
             
             # coordinate system associated with the body
             vector = np.array([self.center, self.center + self.matrix[i]]).T
-            ax.plot(vector[0], vector[1], vector[2], color=colors[i])
+            lines.append(ax.plot(vector[0], vector[1], vector[2], color=colors[i])[0])
         
         # body
         for edge in self.box_edges():
-            ax.plot(edge[0], edge[1], edge[2], color='grey')
+            lines.append(ax.plot(edge[0], edge[1], edge[2], color='grey')[0])
+
+        return lines
+
+    def apply_control(self, v, omega, dt):
+        self.center = self.center + v * dt
+        phi = np.linalg.norm(omega) * dt
+        omega = omega / np.linalg.norm(omega)
+        self.matrix = self.matrix @ R.from_rotvec(phi * omega).as_matrix().T
+
+
+def update_cube(phase_number, cube, linear_velocity, angular_velocity, dt, ax):
+    ax.clear()
+    ax.set(xlim3d=limits[0], xlabel='X')
+    ax.set(ylim3d=limits[1], ylabel='Y')
+    ax.set(zlim3d=limits[2], zlabel='Z')
+    cube.apply_control(linear_velocity[phase_number], angular_velocity[phase_number], dt)
+    return [cube.render(ax)]
 
 
 if __name__ == "__main__":
-    box_center = np.array([0, 1, -5])
-    box_sizes = np.array([2, 2, 2])
-    
-    box_orientation = -np.array([np.pi/2, np.pi/4, 0])
+    box_center = np.array([0.0, 0.0, 0.0])
+    box_sizes = np.array([1.0, 2.0, 4.0])
+    box_orientation = np.array([0.0, 0.0, 0.0])
     
     cube = Box(box_center, box_sizes, box_orientation)
     
-    ax = plt.figure(figsize=(7, 7)).add_subplot(projection='3d')
+    fig = plt.figure(figsize=(10, 10))
+    ax = fig.add_subplot(projection="3d")
+
+    limits = []
+
+    for i in range(3):
+        limits.append(np.array([box_center[i], box_center[i]]) +
+                      np.array([-max(box_sizes), max(box_sizes)])*0.7)
+
+    ax.set(xlim3d=limits[0], xlabel='X')
+    ax.set(ylim3d=limits[1], ylabel='Y')
+    ax.set(zlim3d=limits[2], zlabel='Z')
+
+    n = 300
+    dt = 0.01
+
+    phase = np.arange(0, n, 1)
+    angular_velocity = []
+    angular_velocity.extend([[np.pi/2, 0, 0]] * 100)
+    angular_velocity.extend([[0, np.pi/2, 0]] * 100)
+    angular_velocity.extend([[0, 0, np.pi/2]] * 100)
     
-    cube.render(ax)
+    angular_velocity = np.array(angular_velocity)
+
+    linear_velocity = np.zeros((n, 3))
+
+    fps = 10
+
+    animation = FuncAnimation(fig=fig,
+                              func=update_cube,
+                              frames=n,
+                              fargs=(cube,linear_velocity,angular_velocity,dt,ax),
+                              interval=1000/fps,
+                              repeat=False)
+    fn = 'cube_rotation_funcanimation'
+    plt.show()
+    animation.save(fn+'.html',writer='html',fps=fps)
