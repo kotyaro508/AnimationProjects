@@ -70,17 +70,17 @@ class Box:
 
     def apply_control(self, v, omega, dt):
         self.center = self.center + v * dt
-        phi = np.linalg.norm(omega) * dt
-        omega = omega / np.linalg.norm(omega)
-        self.matrix = self.matrix @ R.from_rotvec(phi * omega).as_matrix().T
+        self.matrix = self.matrix @ R.from_rotvec(omega * dt).as_matrix().T
 
 
-def update_cube(phase_number, cube, linear_velocity, angular_velocity, dt, ax):
-    ax.clear()
-    ax.set(xlim3d=limits[0], xlabel='X')
-    ax.set(ylim3d=limits[1], ylabel='Y')
-    ax.set(zlim3d=limits[2], zlabel='Z')
-    cube.apply_control(linear_velocity[phase_number], angular_velocity[phase_number], dt)
+def update_cube(phase_number, cube, dt, ax):
+    ax.lines.clear()
+    linear_velocity = np.zeros(3)
+    i = float(0 < phase_number <= 100)
+    j = float(100 < phase_number <= 200)
+    k = float(200 < phase_number <= 300)
+    angular_velocity = np.array([i, j, k]) * np.pi/2
+    cube.apply_control(linear_velocity, angular_velocity, dt)
     return [cube.render(ax)]
 
 
@@ -104,27 +104,17 @@ if __name__ == "__main__":
     ax.set(ylim3d=limits[1], ylabel='Y')
     ax.set(zlim3d=limits[2], zlabel='Z')
 
-    n = 300
+    n = 301
     dt = 0.01
-
     phase = np.arange(0, n, 1)
-    angular_velocity = []
-    angular_velocity.extend([[np.pi/2, 0, 0]] * 100)
-    angular_velocity.extend([[0, np.pi/2, 0]] * 100)
-    angular_velocity.extend([[0, 0, np.pi/2]] * 100)
-    
-    angular_velocity = np.array(angular_velocity)
-
-    linear_velocity = np.zeros((n, 3))
 
     fps = 10
 
     animation = FuncAnimation(fig=fig,
                               func=update_cube,
-                              frames=n,
-                              fargs=(cube,linear_velocity,angular_velocity,dt,ax),
+                              frames=phase,
+                              fargs=(cube,dt,ax),
                               interval=1000/fps,
                               repeat=False)
     fn = 'cube_rotation_funcanimation'
-    plt.show()
     animation.save(fn+'.html',writer='html',fps=fps)
