@@ -77,10 +77,10 @@ class Point:
     def __init__(self, location):
         self.location = location
 
-    def render(self, ax):
+    def render(self, ax, color='black', size=5):
         return [ax.plot([self.location[0]], [self.location[1]],
-                        [self.location[2]], color='black',
-                        marker="o", markersize=5)]
+                        [self.location[2]], color=color,
+                        marker="o", markersize=size)]
 
     def apply_control(self, v, dt):
         self.location = self.location + v * dt
