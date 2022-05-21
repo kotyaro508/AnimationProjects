@@ -73,6 +73,19 @@ class Box:
         self.matrix = self.matrix @ R.from_rotvec(omega * dt).as_matrix().T
 
 
+class Point:
+    def __init__(self, location):
+        self.location = location
+
+    def render(self, ax):
+        return [ax.plot([self.location[0]], [self.location[1]],
+                        [self.location[2]], color='black',
+                        marker="o", markersize=5)]
+
+    def apply_control(self, v, dt):
+        self.location = self.location + v * dt
+
+
 def update_cube(phase_number, cube, dt, ax):
     ax.lines.clear()
     linear_velocity = np.zeros(3)
