@@ -47,26 +47,26 @@ class Box:
         
         return edges
                     
-    def render(self, ax):
-        colors = ['red', 'blue', 'green']
-        static_axes = np.eye(3)
-        
-
-        lines = []
-        for i in range(3):            
-            # fixed coordinate system
-            vector = np.array([self.center, self.center + static_axes[i]]).T
-            lines.append(ax.plot(vector[0], vector[1], vector[2], color=colors[i])[0])
-            
-            # coordinate system associated with the body
-            vector = np.array([self.center, self.center + self.matrix[i]]).T
-            lines.append(ax.plot(vector[0], vector[1], vector[2], color=colors[i])[0])
-        
-        # body
-        for edge in self.box_edges():
-            lines.append(ax.plot(edge[0], edge[1], edge[2], color='grey')[0])
-
-        return lines
+    # def render(self, ax):
+    #     colors = ['red', 'blue', 'green']
+    #     static_axes = np.eye(3)
+    #
+    #
+    #     lines = []
+    #     for i in range(3):
+    #         # fixed coordinate system
+    #         vector = np.array([self.center, self.center + static_axes[i]]).T
+    #         lines.append(ax.plot(vector[0], vector[1], vector[2], color=colors[i])[0])
+    #
+    #         # coordinate system associated with the body
+    #         vector = np.array([self.center, self.center + self.matrix[i]]).T
+    #         lines.append(ax.plot(vector[0], vector[1], vector[2], color=colors[i])[0])
+    #
+    #     # body
+    #     for edge in self.box_edges():
+    #         lines.append(ax.plot(edge[0], edge[1], edge[2], color='grey')[0])
+    #
+    #     return lines
 
     def apply_control(self, v, omega, dt):
         self.center = self.center + v * dt
@@ -77,45 +77,131 @@ class Point:
     def __init__(self, location):
         self.location = location
 
-    def render(self, ax, color='black', size=5):
-        return [ax.plot([self.location[0]], [self.location[1]],
-                        [self.location[2]], color=color,
-                        marker="o", markersize=size)]
+    # def render(self, ax, color='black', size=5):
+    #     return [ax.plot([self.location[0]], [self.location[1]],
+    #                     [self.location[2]], color=color,
+    #                     marker="o", markersize=size)]
 
     def apply_control(self, v, dt):
         self.location = self.location + v * dt
 
 
-def update_cube(phase_number, cube, dt, ax):
+class System:
+    def __init__(self, box, points):
+        self.box = box
+        self.points = np.array(points)
+
+    def render(self, ax):
+        colors = ['red', 'blue', 'green']
+        static_axes = np.eye(3)
+
+        lines = []
+        box = self.box
+        for i in range(3):
+            # fixed coordinate system
+            vector = np.array([box.center, box.center + static_axes[i]]).T
+            lines.append(ax.plot(vector[0], vector[1], vector[2], color=colors[i])[0])
+
+            # coordinate system associated with the body
+            vector = np.array([box.center, box.center + box.matrix[i]]).T
+            lines.append(ax.plot(vector[0], vector[1], vector[2], color=colors[i])[0])
+
+        # body
+        for edge in box.box_edges():
+            lines.append(ax.plot(edge[0], edge[1], edge[2], color='grey')[0])
+
+        for point in self.points:
+            lines.append(ax.plot([point.position[0]], [point.position[1]],
+                                 [point.position[2]], color='black',
+                                 marker="o", markersize=5))
+
+        return lines
+
+    def apply_control(self, v_box, omega_box, v_points, dt):
+        self.box.apply_control(v_box, omega_box, dt)
+        [point.apply_control(v_point, dt)
+         for (point, v_point) in zip(self.points, v_points)]
+
+
+def update_system(phase_number, system, dt, ax):
     ax.lines.clear()
-    linear_velocity = np.zeros(3)
+    v_box = np.zeros(3)
     i = float(0 < phase_number <= 100)
     j = float(100 < phase_number <= 200)
     k = float(200 < phase_number <= 300)
-    angular_velocity = np.array([i, j, k]) * np.pi/2
-    cube.apply_control(linear_velocity, angular_velocity, dt)
-    return [cube.render(ax)]
+    omega_box = np.array([i, j, k]) * np.pi/2
+    v_points = np.zeros((len(system.points), 3))
+    dtheta = np.pi/2 * dt
+    center = system.box.center
+    if i:
+        initial_position = system.points[2].position - center
+        v_yz = (np.array([initial_position[2],
+                          -initial_position[1]]) * np.sin(dtheta) -
+                np.array([initial_position[1],
+                          initial_position[2]]) * (1 - np.cos(dtheta)))
+        v_yz = v_yz / np.linalg.norm(v_yz) * np.linalg.norm(initial_position)
+        v = np.array([initial_position[0],
+                      v_yz[0],
+                      v_yz[1]])
+        v_points[2] = v
+        v_points[3] = -v
+    if j:
+        initial_position = system.points[4].position - center
+        v_zx = (np.array([initial_position[0],
+                          -initial_position[2]]) * np.sin(dtheta) -
+                np.array([initial_position[2],
+                          initial_position[0]]) * (1 - np.cos(dtheta)))
+        v_zx = v_zx / np.linalg.norm(v_zx) * np.linalg.norm(initial_position)
+        v = np.array([v_zx[1],
+                      initial_position[0],
+                      v_zx[0]])
+        v_points[4] = v
+        v_points[5] = -v
+    if k:
+        initial_position = system.points[0].position - center
+        v_xy = (np.array([initial_position[1],
+                          -initial_position[0]]) * np.sin(dtheta) -
+                np.array([initial_position[0],
+                          initial_position[1]]) * (1 - np.cos(dtheta)))
+        v_xy = v_xy / np.linalg.norm(v_xy) * np.linalg.norm(initial_position)
+        v = np.array([v_xy[0],
+                      v_xy[1],
+                      initial_position[0]])
+        v_points[0] = v
+        v_points[1] = -v
+    system.apply_control(v_box, omega_box, v_points, dt)
+    return [system.render(ax)]
 
 
 if __name__ == "__main__":
     box_center = np.array([0.0, 0.0, 0.0])
-    box_sizes = np.array([1.0, 2.0, 4.0])
+    box_sizes = np.array([3.0, 5.0, 9.0])
     box_orientation = np.array([0.0, 0.0, 0.0])
-    
+
     cube = Box(box_center, box_sizes, box_orientation)
-    
+
     fig = plt.figure(figsize=(10, 10))
     ax = fig.add_subplot(projection="3d")
 
     limits = []
-
     for i in range(3):
         limits.append(np.array([box_center[i], box_center[i]]) +
-                      np.array([-max(box_sizes), max(box_sizes)])*0.7)
+                      np.array([-max(box_sizes), max(box_sizes)]) * 0.7)
 
     ax.set(xlim3d=limits[0], xlabel='X')
     ax.set(ylim3d=limits[1], ylabel='Y')
     ax.set(zlim3d=limits[2], zlabel='Z')
+
+    points = np.array([Point(point + box_center)
+                       for point in np.array([[1.0, 0.0, 0.0],
+                                              [-1.0, 0.0, 0.0],
+                                              [0.0, 2.0, 0.0],
+                                              [0.0, -2.0, 0.0],
+                                              [0.0, 0.0, 4.0],
+                                              [0.0, 0.0, -4.0]])])
+
+    system = System(cube, points)
+    system.render(ax)
 
     n = 301
     dt = 0.01
@@ -124,10 +210,10 @@ if __name__ == "__main__":
     fps = 10
 
     animation = FuncAnimation(fig=fig,
-                              func=update_cube,
+                              func=update_system,
                               frames=phase,
-                              fargs=(cube,dt,ax),
-                              interval=1000/fps,
+                              fargs=(system, dt, ax),
+                              interval=1000 / fps,
                               repeat=False)
     fn = 'cube_rotation_funcanimation'
-    animation.save(fn+'.html',writer='html',fps=fps)
+    animation.save(fn + '.html', writer='html', fps=fps)
