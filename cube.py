@@ -3,12 +3,16 @@ import numpy as np
 from scipy.spatial.transform import Rotation as R
 from matplotlib.animation import FuncAnimation
 
+# from mpl_toolkits.mplot3d.art3d import Line3D
+
 
 class Box:
-    def __init__(self, center, sizes, orientation):
+    def __init__(self, center, sizes, orientation, mass, inertia_tensor):
         self.center = center
         self.sizes = sizes
         self.matrix = R.from_euler("xyz", orientation).as_matrix().T
+        self.mass = mass
+        self.inertia_tensor = inertia_tensor
 
     def box_edges(self):
         edges = []
@@ -64,14 +68,17 @@ class Box:
         for i in range(3):
             # fixed coordinate system
             vector = np.array([self.center, self.center + static_axes[i]]).T
+            #             lines.append(Line3D(vector[0], vector[1], vector[2], color=colors[i]))
             lines.append(ax.plot(vector[0], vector[1], vector[2], color=colors[i])[0])
 
             # coordinate system associated with the box
             vector = np.array([self.center, self.center + self.matrix[i]]).T
+            #             lines.append(Line3D(vector[0], vector[1], vector[2], color=colors[i]))
             lines.append(ax.plot(vector[0], vector[1], vector[2], color=colors[i])[0])
 
         # box
         for edge in self.box_edges():
+            #             lines.append(Line3D(edge[0], edge[1], edge[2], color='grey'))
             lines.append(ax.plot(edge[0], edge[1], edge[2], color="grey")[0])
 
         return lines
@@ -82,26 +89,26 @@ class Box:
 
 
 class Point:
-    def __init__(self, position):
+    def __init__(self, position, mass):
         self.position = position
+        self.mass = mass
 
-    def render(self, ax):
+    def render(self, ax, color):
         return ax.plot(
             [self.position[0]],
             [self.position[1]],
             [self.position[2]],
-            color="black",
+            color=color,
             marker="o",
             markersize=5,
         )
 
-    def apply_control(self, is_linear, velocity, dt):
-        if is_linear:
-            # velocity is linear
-            self.position = self.position + velocity * dt
-        else:
-            # velocity is angular velocity of the box
-            self.position = R.from_rotvec(velocity * dt).as_matrix() @ self.position
+    #         return Line3D([self.position[0]], [self.position[1]],
+    #                         [self.position[2]], color=color,
+    #                         marker="o", markersize=5)
+
+    def apply_control(self, v, dt):
+        self.position = self.position + v * dt
 
 
 class System:
@@ -112,31 +119,62 @@ class System:
     def render(self, ax):
         lines = self.box.render(ax)
         for point in self.points:
-            lines.append(point.render(ax))
+            lines.append(point.render(ax, "black"))
         return lines
 
     def apply_control(self, v_box, omega_box, v_points, dt):
         self.box.apply_control(v_box, omega_box, dt)
         for (point, v_point) in zip(self.points, v_points):
-            if np.linalg.norm(v_point):
-                # point with its own motion
-                point.apply_control(True, v_point, dt)
-            else:
-                # point without its own motion - rotates with the box
-                point.apply_control(False, omega_box, dt)
+            point.apply_control(v_point, dt)
 
 
 def update_system(phase_number, system, dt, ax):
     ax.lines.clear()
     v_box = np.zeros(3)
-    v_points = np.zeros((len(system.points), 3))
+    v_points = np.resize(v_box, (len(system.points), 3))
     omega_box = np.zeros(3)
     if 0 < phase_number <= 100:
         omega_box = np.array([np.pi / 2, 0, 0])
+        v_34 = (
+            R.from_rotvec(-omega_box * dt).as_matrix() @ system.points[2].position
+            - system.points[2].position
+        ) / dt
+        v_56 = (
+            R.from_rotvec(omega_box * dt).as_matrix() @ system.points[4].position
+            - system.points[4].position
+        ) / dt
+        v_points[2] = v_34
+        v_points[3] = -v_34
+        v_points[4] = v_56
+        v_points[5] = -v_56
     elif 100 < phase_number <= 200:
         omega_box = np.array([0, np.pi / 2, 0])
+        v_12 = (
+            R.from_rotvec(-omega_box * dt).as_matrix() @ system.points[0].position
+            - system.points[0].position
+        ) / dt
+        v_34 = (
+            R.from_rotvec(omega_box * dt).as_matrix() @ system.points[2].position
+            - system.points[2].position
+        ) / dt
+        v_points[0] = v_12
+        v_points[1] = -v_12
+        v_points[2] = v_34
+        v_points[3] = -v_34
     elif 200 < phase_number <= 300:
         omega_box = np.array([0, 0, np.pi / 2])
+        v_56 = (
+            R.from_rotvec(-omega_box * dt).as_matrix() @ system.points[4].position
+            - system.points[4].position
+        ) / dt
+        v_34 = (
+            R.from_rotvec(omega_box * dt).as_matrix() @ system.points[2].position
+            - system.points[2].position
+        ) / dt
+        v_points[4] = v_56
+        v_points[5] = -v_56
+        v_points[2] = v_34
+        v_points[3] = -v_34
     system.apply_control(v_box, omega_box, v_points, dt)
     return [system.render(ax)]
 
@@ -145,8 +183,10 @@ if __name__ == "__main__":
     box_center = np.array([0.0, 0.0, 0.0])
     box_sizes = np.array([3.0, 5.0, 9.0])
     box_orientation = np.array([0.0, 0.0, 0.0])
+    box_mass = 1000
+    box_inertia_tensor = np.array([[300, 0, 0], [0, 400, 0], [0, 0, 500]])
 
-    cube = Box(box_center, box_sizes, box_orientation)
+    cube = Box(box_center, box_sizes, box_orientation, box_mass, box_inertia_tensor)
 
     fig = plt.figure(figsize=(10, 10))
     ax = fig.add_subplot(projection="3d")
@@ -164,7 +204,7 @@ if __name__ == "__main__":
 
     points = np.array(
         [
-            Point(point + box_center)
+            Point(point + box_center, 10)
             for point in np.array(
                 [
                     [1.0, 0.0, 0.0],
@@ -179,6 +219,7 @@ if __name__ == "__main__":
     )
 
     system = System(cube, points)
+    #     system.render(ax)
 
     n = 301
     dt = 0.01
