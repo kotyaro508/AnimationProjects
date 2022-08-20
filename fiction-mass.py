@@ -1,5 +1,6 @@
 import matplotlib.pyplot as plt
 import numpy as np
+from scipy.linalg import solve
 from scipy.spatial.transform import Rotation as R
 from matplotlib.animation import FuncAnimation
 
@@ -56,6 +57,8 @@ class Box:
         return edges
 
     def render(self, ax):
+        # center of the box
+
         colors = ["red", "blue", "green"]
         static_axes = np.eye(3)
 
@@ -104,11 +107,18 @@ class System:
     def __init__(self, box, points):
         self.box = box
         self.points = points
+        self.inertia_tensor = box.inertia_tensor
+        for point in points[::-1]:
+            r = np.array([point.position])
+            m = point.mass
+            self.inertia_tensor += m * np.linalg.norm(r) ** 2 * np.eye(3)
+            self.inertia_tensor -= m * (r.T @ r)
 
     def render(self, ax):
         lines = self.box.render(ax)
-        for point in self.points:
+        for point in self.points[:-1]:
             lines.append(point.render(ax, "black"))
+        lines.append(self.points[-1].render(ax, "grey"))
         return lines
 
     def apply_control(self, v_box, omega_box, v_points, dt):
@@ -118,48 +128,44 @@ class System:
                 R.from_rotvec(omega_box * dt).as_matrix() @ point.position
                 - point.position
             ) / dt
-            point.apply_control(v + v_point, dt)
+            point.apply_control(v + v_point + v_box, dt)
 
 
-def update_system(phase_number, system, dt, ax):
+#  equation from the article
+def omega_linear_system(system, r_points, v_points):
+    M = system.box.mass
+    m = sum([point.mass for point in system.points[::-1]])
+    mu = M * m / (M + m)
+    r = np.array([r_points])
+    J = system.inertia_tensor + mu * (np.linalg.norm(r) ** 2 * np.eye(3) - r.T @ r)
+    b = -mu * np.cross(r_points, v_points)
+    omega = solve(J, b)
+    return omega
+
+
+def update_system(phase_number, axis_for_point, center_for_point, system, dt, ax):
     ax.lines.clear()
     v_box = np.zeros(3)
-    v_points = np.resize(v_box, (len(system.points), 3))
-    omega_box = np.zeros(3)
-    if 0 < phase_number <= 100:
-        omega_box = np.array([np.pi / 2, 0, 0])
-        v_points[2] = (
-            2
-            * (
-                R.from_rotvec(-omega_box * dt).as_matrix() @ system.points[2].position
-                - system.points[2].position
+    v_points = np.zeros((len(system.points), 3))
+    if phase_number > 0:
+        axis = system.box.matrix @ axis_for_point
+        v_point = (
+            R.from_rotvec(axis * dt).as_matrix()
+            @ (system.points[-1].position - center_for_point)
+            - system.points[-1].position
+            + center_for_point
+        ) / dt
+        v_points = np.resize(v_point, (len(system.points), 3))
+        system.apply_control(np.zeros(3), np.zeros(3), v_points, dt)
+        omega_box = omega_linear_system(system, r_points, v_points)
+        v_box = -(
+            sum(
+                point.mass * (np.cross(omega_box, point.position) + v_point)
+                for point in system.points[::-1]
             )
-            / dt
+            / (system.box.mass + sum([point.mass for point in system.points[::-1]]))
         )
-        v_points[3] = -v_points[2]
-    elif 100 < phase_number <= 200:
-        omega_box = np.array([0, np.pi / 2, 0])
-        v_points[0] = (
-            2
-            * (
-                R.from_rotvec(-omega_box * dt).as_matrix() @ system.points[0].position
-                - system.points[0].position
-            )
-            / dt
-        )
-        v_points[1] = -v_points[0]
-    elif 200 < phase_number <= 300:
-        omega_box = np.array([0, 0, np.pi / 2])
-        v_points[4] = (
-            2
-            * (
-                R.from_rotvec(-omega_box * dt).as_matrix() @ system.points[4].position
-                - system.points[4].position
-            )
-            / dt
-        )
-        v_points[5] = -v_points[4]
-    system.apply_control(v_box, omega_box, v_points, dt)
+        system.apply_control(v_box, omega_box, np.zeros((len(system.points), 3)), dt)
     return [system.render(ax)]
 
 
@@ -168,7 +174,7 @@ if __name__ == "__main__":
     box_sizes = np.array([3.0, 5.0, 9.0])
     box_orientation = np.array([0.0, 0.0, 0.0])
     box_mass = 1000
-    box_inertia_tensor = np.array([[300, 0, 0], [0, 400, 0], [0, 0, 500]])
+    box_inertia_tensor = np.array([[300.0, 0, 0], [0, 400.0, 0], [0, 0, 500.0]])
 
     cube = Box(box_center, box_sizes, box_orientation, box_mass, box_inertia_tensor)
 
@@ -188,12 +194,11 @@ if __name__ == "__main__":
 
     positions = np.array(
         [
-            [1.0, 0.0, 0.0],
-            [-1.0, 0.0, 0.0],
-            [0.0, 2.0, 0.0],
-            [0.0, -2.0, 0.0],
-            [0.0, 0.0, 4.0],
-            [0.0, 0.0, -4.0],
+            [1.0, 1.0, 0.0],
+            [1.0, 0.0, 1.0],
+            [0.0, 1.0, 1.0],
+            [-2.0, -2.0, -2.0],
+            [0.0, 0.0, 0.0],
         ]
     )
     points_masses = np.array([10] * 6)
@@ -206,6 +211,12 @@ if __name__ == "__main__":
 
     system = System(cube, points)
 
+    axis_for_point = np.array([0, 1, 0])
+    axis_for_point = axis_for_point / np.linalg.norm(axis_for_point)
+    center_for_point = np.array(
+        [1, 0, 0]
+    )  # вектор должен быть ортогонален axis_for_point
+
     n = 301
     dt = 0.01
     phase = np.arange(0, n, 1)
@@ -216,7 +227,7 @@ if __name__ == "__main__":
         fig=fig,
         func=update_system,
         frames=phase,
-        fargs=(system, dt, ax),
+        fargs=(system, axis_for_point, center_for_point, dt, ax),
         interval=1000 / fps,
         repeat=False,
     )
