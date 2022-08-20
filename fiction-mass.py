@@ -132,40 +132,32 @@ class System:
 
 
 #  equation from the article
-def omega_linear_system(system, r_points, v_points):
+def omega_linear_system(system, r, v):
     M = system.box.mass
     m = sum([point.mass for point in system.points[::-1]])
     mu = M * m / (M + m)
-    r = np.array([r_points])
-    J = system.inertia_tensor + mu * (np.linalg.norm(r) ** 2 * np.eye(3) - r.T @ r)
-    b = -mu * np.cross(r_points, v_points)
+    r = np.array([r])
+    J = system.inertia_tensor + mu * (np.linalg.norm(r)**2 * np.eye(3) - r.T @ r)
+    b = -mu * np.cross(r, v).reshape((3, 1))
     omega = solve(J, b)
-    return omega
+    return np.array([row[0] for row in omega])
 
 
 def update_system(phase_number, axis_for_point, center_for_point, system, dt, ax):
     ax.lines.clear()
-    v_box = np.zeros(3)
-    v_points = np.zeros((len(system.points), 3))
-    if phase_number > 0:
+    if (phase_number > 0):
+        r = system.points[-1].position
         axis = system.box.matrix @ axis_for_point
-        v_point = (
-            R.from_rotvec(axis * dt).as_matrix()
-            @ (system.points[-1].position - center_for_point)
-            - system.points[-1].position
-            + center_for_point
-        ) / dt
-        v_points = np.resize(v_point, (len(system.points), 3))
-        system.apply_control(np.zeros(3), np.zeros(3), v_points, dt)
-        omega_box = omega_linear_system(system, r_points, v_points)
-        v_box = -(
-            sum(
-                point.mass * (np.cross(omega_box, point.position) + v_point)
-                for point in system.points[::-1]
-            )
-            / (system.box.mass + sum([point.mass for point in system.points[::-1]]))
-        )
-        system.apply_control(v_box, omega_box, np.zeros((len(system.points), 3)), dt)
+        v = (R.from_rotvec(axis * dt).as_matrix()
+             @ (system.points[-1].position - center_for_point)
+             - system.points[-1].position + center_for_point) / dt
+#         v = np.cross(axis_for_point, center_for_point - r)
+        omega_box = omega_linear_system(system, r, v)
+        v_box = -(sum(point.mass * (np.cross(omega_box, point.position) + v)
+                     for point in system.points[::-1])
+                  / (system.box.mass + sum([point.mass for point in system.points[::-1]])))
+        v_points = np.resize(v, (len(system.points), 3))
+        system.apply_control(v_box, omega_box, v_points, dt)
     return [system.render(ax)]
 
 
@@ -217,8 +209,8 @@ if __name__ == "__main__":
         [1, 0, 0]
     )  # вектор должен быть ортогонален axis_for_point
 
-    n = 301
-    dt = 0.01
+    n = 401
+    dt = 2 * np.pi / (n - 1)
     phase = np.arange(0, n, 1)
 
     fps = 10
@@ -227,7 +219,7 @@ if __name__ == "__main__":
         fig=fig,
         func=update_system,
         frames=phase,
-        fargs=(system, axis_for_point, center_for_point, dt, ax),
+        fargs=(axis_for_point, center_for_point, system, dt, ax),
         interval=1000 / fps,
         repeat=False,
     )
