@@ -4,27 +4,55 @@ from scipy.linalg import solve
 from scipy.spatial.transform import Rotation as R
 from matplotlib.animation import FuncAnimation
 
-from classes import Box, Point, System
+from classes import Box, Point
+
+
+class System:
+    def __init__(self, box, points, fiction_point):
+        self.box = box
+        self.points = points
+        self.fiction_point = fiction_point
+
+    def render(self, ax):
+        lines = self.box.render(ax)
+        for point in self.points:
+            lines.append(point.render(ax, "black"))
+        lines.append(self.fiction_point.render(ax, "grey"))
+        return lines
+
+    def apply_control(self, v_box, omega_box, v_points, v_fiction_point, dt):
+        self.box.apply_control(v_box, omega_box, dt)
+        for (point, v_point) in zip(self.points, v_points):
+            v = (
+                R.from_rotvec(omega_box * dt).as_matrix() @ point.position
+                - point.position
+            ) / dt
+            point.apply_control(v + v_point + v_box, dt)
+        v = (
+            R.from_rotvec(omega_box * dt).as_matrix() @ fiction_point.position
+            - fiction_point.position
+        ) / dt
+        self.fiction_point.apply_control(v + v_fiction_point + v_box, dt)
 
 
 #  equation from the article
 def omega_linear_system(system, r, v):
     M = system.box.mass
-    m = sum([point.mass for point in system.points[:-1]])
+    m = system.fiction_point.mass
     mu = M * m / (M + m)
     J = (
         system.box.inertia_tensor
         + sum(
             [
                 point.mass * np.linalg.norm(point.position, ord=2)
-                for point in system.points[:-1]
+                for point in system.points
             ]
         )
         * np.eye(3)
         - sum(
             [
                 point.mass * (np.array([point.position]).T @ np.array([point.position]))
-                for point in system.points[:-1]
+                for point in system.points
             ]
         )
         + mu * (np.linalg.norm(r, ord=2) * np.eye(3) - np.array([r]).T @ np.array([r]))
@@ -36,28 +64,23 @@ def omega_linear_system(system, r, v):
 
 def update_system(phase_number, axis_for_point, center_for_point, system, dt, ax):
     ax.lines.clear()
-    #     v_box = np.zeros(3)
-    #     v_points = np.zeros((len(system.points), 3))
     if phase_number > 0:
-        r = system.points[-1].position
+        r_fiction_point = system.fiction_point.position
         axis = system.box.matrix @ axis_for_point
-        v = (
-            R.from_rotvec(axis * dt).as_matrix()
-            @ (system.points[-1].position - center_for_point)
-            - system.points[-1].position
-            + center_for_point
+        v_fiction_point = (
+            R.from_rotvec(axis * dt).as_matrix() @ (r_fiction_point - center_for_point)
+            - (r_fiction_point - center_for_point)
         ) / dt
-        #         v = np.cross(axis_for_point, center_for_point - r)
-        omega_box = omega_linear_system(system, r, v)
+        omega_box = omega_linear_system(system, r_fiction_point, v_fiction_point)
         v_box = -(
             sum(
-                point.mass * (np.cross(omega_box, point.position) + v)
-                for point in system.points[:-1]
+                point.mass * (np.cross(omega_box, point.position) + v_fiction_point)
+                for point in system.points
             )
-            / (system.box.mass + sum([point.mass for point in system.points[::-1]]))
+            / (system.box.mass + system.fiction_point.mass)
         )
-        v_points = np.resize(v, (len(system.points), 3))
-        system.apply_control(v_box, omega_box, v_points, dt)
+        v_points = np.resize(v_fiction_point, (len(system.points), 3))
+        system.apply_control(v_box, omega_box, v_points, v_fiction_point, dt)
     return [system.render(ax)]
 
 
@@ -71,24 +94,26 @@ if __name__ == "__main__":
     )
 
     positions = np.array(
-        [
-            [1.0, 1.0, 0.0],
-            [1.0, 0.0, 1.0],
-            [0.0, 1.0, 1.0],
-            [-2.0, -2.0, -2.0],
-            [0.0, 0.0, 0.0],
-        ]
+        [[1.0, 1.0, 0.0], [1.0, 0.0, 1.0], [0.0, 1.0, 1.0], [-2.0, -2.0, -2.0]]
     )
-    points_masses = np.array([10] * 6)
+    masses = np.array([10] * len(positions))
     points = np.array(
         [
-            Point(point + box_center, mass)
-            for (point, mass) in zip(positions, points_masses)
+            Point(position + box_center, mass)
+            for (position, mass) in zip(positions, masses)
         ]
     )
 
+    fiction_point_mass = sum(masses)
+    fiction_point_position = (
+        sum([mass * position for (position, mass) in zip(positions, masses)])
+        / fiction_point_mass
+    )
+
+    fiction_point = Point(fiction_point_position + box_center, fiction_point_mass)
+
     cube = Box(box_center, box_sizes, box_orientation, box_mass, box_inertia_tensor)
-    system = System(cube, points)
+    system = System(cube, points, fiction_point)
 
     axis_for_point = np.array([0, 1, 0])
     axis_for_point = axis_for_point / np.linalg.norm(axis_for_point)
