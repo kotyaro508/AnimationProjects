@@ -12,7 +12,7 @@ class System:
         self.box = box
         self.points = points
         self.fiction_point = fiction_point
-        self.points_motion = np.array([[point.position] for point in system.points])
+        self.points_motion = np.array([[point.position] for point in self.points])
         self.fiction_point_motion = np.array([fiction_point.position])
 
     def render(self, ax):
@@ -23,9 +23,9 @@ class System:
         for point_motion in self.points_motion:
             lines.append(
                 ax.plot(
-                    point_motion[1:, 0],
-                    point_motion[1:, 1],
-                    point_motion[1:, 2],
+                    point_motion[:, 0],
+                    point_motion[:, 1],
+                    point_motion[:, 2],
                     color="black",
                     marker="o",
                     markersize=1,
@@ -33,9 +33,9 @@ class System:
             )
         lines.append(
             ax.plot(
-                self.fiction_point_motion[1:, 0],
-                self.fiction_point_motion[1:, 1],
-                self.fiction_point_motion[1:, 2],
+                self.fiction_point_motion[:, 0],
+                self.fiction_point_motion[:, 1],
+                self.fiction_point_motion[:, 2],
                 color="grey",
                 marker="o",
                 markersize=1,
